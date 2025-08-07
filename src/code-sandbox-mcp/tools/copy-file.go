@@ -11,7 +11,6 @@ import (
 	"strings"
 
 	"github.com/docker/docker/api/types/container"
-	"github.com/docker/docker/client"
 	"github.com/mark3labs/mcp-go/mcp"
 )
 
@@ -67,10 +66,8 @@ func CopyFile(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolRe
 
 // createDirectoryInContainer creates a directory in the container if it doesn't exist
 func createDirectoryInContainer(ctx context.Context, containerID string, dirPath string) error {
-	cli, err := client.NewClientWithOpts(
-		client.FromEnv,
-		client.WithAPIVersionNegotiation(),
-	)
+	// Try to create Docker client with multiple fallback options
+	cli, err := createDockerClient()
 	if err != nil {
 		return fmt.Errorf("failed to create Docker client: %w", err)
 	}
@@ -95,10 +92,8 @@ func createDirectoryInContainer(ctx context.Context, containerID string, dirPath
 
 // copyFileToContainer copies a single file to the container
 func copyFileToContainer(ctx context.Context, containerID string, srcPath string, destPath string) error {
-	cli, err := client.NewClientWithOpts(
-		client.FromEnv,
-		client.WithAPIVersionNegotiation(),
-	)
+	// Try to create Docker client with multiple fallback options
+	cli, err := createDockerClient()
 	if err != nil {
 		return fmt.Errorf("failed to create Docker client: %w", err)
 	}

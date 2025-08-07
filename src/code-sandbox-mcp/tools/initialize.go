@@ -3,10 +3,12 @@ package tools
 import (
 	"context"
 	"fmt"
+	"io"
+	"strings"
+	"time"
 
-	dockerImage "github.com/docker/docker/api/types/image"
 	"github.com/docker/docker/api/types/container"
-	"github.com/docker/docker/client"
+	dockerImage "github.com/docker/docker/api/types/image"
 	"github.com/mark3labs/mcp-go/mcp"
 )
 
@@ -30,21 +32,63 @@ func InitializeEnvironment(ctx context.Context, request mcp.CallToolRequest) (*m
 
 // createContainer creates a new Docker container and returns its ID
 func createContainer(ctx context.Context, image string) (string, error) {
-	cli, err := client.NewClientWithOpts(
-		client.FromEnv,
-		client.WithAPIVersionNegotiation(),
-	)
+	// Try to create Docker client with multiple fallback options
+	cli, err := createDockerClient()
 	if err != nil {
 		return "", fmt.Errorf("failed to create Docker client: %w", err)
 	}
 	defer cli.Close()
 
-	// Pull the Docker image if not already available
-	reader, err := cli.ImagePull(ctx, image, dockerImage.PullOptions{})
+	// Check if image exists locally first
+	_, err = cli.ImageInspect(ctx, image)
 	if err != nil {
-		return "", fmt.Errorf("failed to pull Docker image %s: %w", image, err)
+		// Image doesn't exist locally, so pull it
+		fmt.Printf("Docker image %s not found locally, pulling from registry...\n", image)
+
+		// Create a context with timeout for the pull operation
+		// This prevents hanging when the image doesn't exist in the registry
+		pullCtx, cancel := context.WithTimeout(ctx, 5*time.Minute)
+		defer cancel()
+
+		pullReader, pullErr := cli.ImagePull(pullCtx, image, dockerImage.PullOptions{})
+		if pullErr != nil {
+			// Check if this is a timeout error
+			if pullCtx.Err() == context.DeadlineExceeded {
+				return "", fmt.Errorf("timeout while trying to pull Docker image %s - this usually means the image doesn't exist in the registry or the registry is unreachable", image)
+			}
+			// Check for common "not found" error patterns
+			errStr := pullErr.Error()
+			if strings.Contains(errStr, "not found") || strings.Contains(errStr, "404") || strings.Contains(errStr, "manifest unknown") {
+				return "", fmt.Errorf("docker image %s not found in registry. Please check that the image name and tag are correct", image)
+			}
+			return "", fmt.Errorf("failed to pull Docker image %s: %w", image, pullErr)
+		}
+		defer pullReader.Close()
+
+		// Read the pull response to ensure it completes
+		// This also provides feedback on the pull progress
+		pullOutput, readErr := io.ReadAll(pullReader)
+		if readErr != nil {
+			// Check if this is a timeout error
+			if pullCtx.Err() == context.DeadlineExceeded {
+				return "", fmt.Errorf("timeout while downloading Docker image %s", image)
+			}
+			return "", fmt.Errorf("failed to read pull response for image %s: %w", image, readErr)
+		}
+
+		// Check if pull was successful by looking for error messages in output
+		pullStr := string(pullOutput)
+		if strings.Contains(pullStr, "not found") || strings.Contains(pullStr, "404") || strings.Contains(pullStr, "manifest unknown") {
+			return "", fmt.Errorf("docker image %s not found in registry. Please check that the image name and tag are correct", image)
+		}
+		if strings.Contains(pullStr, "error") || strings.Contains(pullStr, "Error") {
+			return "", fmt.Errorf("failed to pull Docker image %s: %s", image, pullStr)
+		}
+
+		fmt.Printf("Successfully pulled Docker image %s\n", image)
+	} else {
+		fmt.Printf("Docker image %s found locally\n", image)
 	}
-	defer reader.Close()
 
 	// Create container config with a working directory
 	config := &container.Config{

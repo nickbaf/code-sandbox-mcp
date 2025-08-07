@@ -6,9 +6,8 @@ import (
 	"strings"
 
 	"github.com/docker/docker/api/types/container"
-	"github.com/mark3labs/mcp-go/mcp"
-	"github.com/docker/docker/client"
 	"github.com/docker/docker/pkg/stdcopy"
+	"github.com/mark3labs/mcp-go/mcp"
 )
 
 // Exec executes commands in a container
@@ -83,10 +82,8 @@ func Exec(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult
 
 // executeCommandWithOutput runs a command in a container and returns its stdout, stderr, exit code, and any error
 func executeCommandWithOutput(ctx context.Context, containerID string, cmd string) (stdout string, stderr string, exitCode int, err error) {
-	cli, err := client.NewClientWithOpts(
-		client.FromEnv,
-		client.WithAPIVersionNegotiation(),
-	)
+	// Try to create Docker client with multiple fallback options
+	cli, err := createDockerClient()
 	if err != nil {
 		return "", "", -1, fmt.Errorf("failed to create Docker client: %w", err)
 	}

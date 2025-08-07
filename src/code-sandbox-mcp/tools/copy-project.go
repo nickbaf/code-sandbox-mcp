@@ -12,7 +12,6 @@ import (
 	"time"
 
 	"github.com/docker/docker/api/types/container"
-	"github.com/docker/docker/client"
 	"github.com/mark3labs/mcp-go/mcp"
 )
 
@@ -144,10 +143,8 @@ func createTarArchive(srcPath string) (io.Reader, error) {
 
 // copyToContainer copies a tar archive to a container
 func copyToContainer(ctx context.Context, containerID string, destPath string, tarArchive io.Reader) error {
-	cli, err := client.NewClientWithOpts(
-		client.FromEnv,
-		client.WithAPIVersionNegotiation(),
-	)
+	// Try to create Docker client with multiple fallback options
+	cli, err := createDockerClient()
 	if err != nil {
 		return fmt.Errorf("failed to create Docker client: %w", err)
 	}
@@ -193,10 +190,8 @@ func extractTarInContainer(ctx context.Context, containerID string, tarFilePath 
 
 // executeCommand runs a command in a container and waits for it to complete
 func executeCommand(ctx context.Context, containerID string, cmd []string) error {
-	cli, err := client.NewClientWithOpts(
-		client.FromEnv,
-		client.WithAPIVersionNegotiation(),
-	)
+	// Try to create Docker client with multiple fallback options
+	cli, err := createDockerClient()
 	if err != nil {
 		return fmt.Errorf("failed to create Docker client: %w", err)
 	}

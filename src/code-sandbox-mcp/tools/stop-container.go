@@ -5,7 +5,6 @@ import (
 	"fmt"
 
 	"github.com/docker/docker/api/types/container"
-	"github.com/docker/docker/client"
 	"github.com/mark3labs/mcp-go/mcp"
 )
 
@@ -27,10 +26,8 @@ func StopContainer(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallT
 
 // stopAndRemoveContainer stops and removes a Docker container
 func stopAndRemoveContainer(ctx context.Context, containerId string) error {
-	cli, err := client.NewClientWithOpts(
-		client.FromEnv,
-		client.WithAPIVersionNegotiation(),
-	)
+	// Try to create Docker client with multiple fallback options
+	cli, err := createDockerClient()
 	if err != nil {
 		return fmt.Errorf("failed to create Docker client: %w", err)
 	}
